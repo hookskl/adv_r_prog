@@ -22,136 +22,196 @@
 # need to write print and summary methods for some classes (again, see below).
 #############################
 
-## create LongitudinalData class (S3)
+## load necessary packages
+require(dplyr)
+require(tidyr)
 
-LongitudinalData <- function(df) {
-        structure(list(df = df,
-                       subjects = unique(df$id),
-                       rooms = unique(df$room)),
-                  class = "LongitudinalData")
-}
-
-## function make_LD is used to convert a data frame
-## to class LongitudinalData
-make_LD <- function(df) UseMethod("make_LD")
+## Constructor function for LongitudinalData objects
+## df is a data frame object
 
 make_LD <- function(df) {
-        LongitudinalData(df)
+        if(!"data.frame" %in% class(df))
+                stop("'df' should be a data.frame")
+        
+        ## Create the "LongitudinalData" object 
+        object <- list(df = df)
+        
+        ## Set the class name
+        class(object) <- "LongitudinalData"
+        object
 }
 
-## create generic method for printing objects of class 
-## LongitudinalData
-print.LongitudinalData <- function(ld) {
-        cat(paste("Longitudinal dataset with", length(ld$subjects), "subjects"))
+
+## print method for LongitudinalData objects
+## ld an object of class LongitudinalData
+print.LongitudinalData <- function(ld, ...) {
+        cat(paste("Longitudinal dataset with", 
+                  length(unique(ld$df$id)), "subjects"))
+        invisible(ld)
 }
 
-## subject function takes a LogitudinalData object
-## and integer value representing a subject's id
-## and returns a subject object containing a dataframe
-## filtered by the id. 
-subject <- function(ld, subject_id) {
-        subject_df <- ld$df %>% filter(id == subject_id) 
-        structure(list(subject_id = subject_id, df = subject_df),
-                  class = "subject")
-}
+## generic method subject filters LongitudinalData objects
+## subj_id is a numeric value for filtering `id`
+## returns an object of class subject
+subject <- function(ld, subj_id) UseMethod("subject")
 
-## generic method for printing objects of class subject
-print.subject <- function(subject) {
-        if(nrow(subject$df) == 0){
-                NULL
-        } else {
-                cat(paste("Subject ID:", subject$subject))
-                
+subject.LongitudinalData <- function(ld, subj_id) {
+        if(!is.numeric(subj_id)) {
+                stop("'subj_id' should be a numeric value")
         }
+        
+        ## create the "subject" object
+        df <- ld$df %>% filter(id == subj_id)
+        object <- list(id = subj_id, df = df)
+        class(object) <- "subject"
+        object
+}
+
+## print method for subject objects
+## subj an object of class subject
+print.subject <- function(subj, ...) {
+        if(nrow(subj$df) == 0) {
+                print(NULL)
+        } else {
+                cat(paste("Subject ID:", subj$id))     
+        }
+        invisible(subj)
         
 }
 
-## generic method for summarizing objects of class subject
-## returns class subjectSummary
-summary.subject <- function(subject) {
-        summary_df <- subject$df %>% 
-                group_by(visit, room) %>% 
-                summarise(mean_value = mean(value, na.rm = TRUE), .groups = "drop") %>% 
-                pivot_wider(names_from = room, values_from = mean_value) 
-        structure(list(subject_id = subject$subject_id, summary_df = summary_df),
-                  class = "subjectSummary")
-}
-
-## generic method for printing objects of class
-## subjectSummary
-print.subjectSummary <- function(subjectSummary) {
-        cat(paste("ID:", subjectSummary$subject_id))
-        cat(paste(" ", " ",  sep = "\n"))
-        print(subjectSummary$summary_df)
-}
-
-## visit function takes a subject object and integer value
-## representing a visit id and returns a visit object
-## containing a dataframe filtered by visit id
-visit <- function(subject, v_id) {
-        visit_df <- subject$df %>% filter(visit == v_id) 
-        structure(list(subject_id = subject$subject_id, visit_id = v_id, df = visit_df),
-                  class = "visit")
-}
-
-## generic method for printing visit objects
-print.visit <- function(visit) {
-        if(nrow(visit$df) == 0){
+## summary method for subject objects
+## subj an object of class subject
+## creates a table of mean values for 
+## each room type, grouped by visit
+## returns object of class summarySubject
+summary.subject <- function(subj, ...) {
+        if(nrow(subj$df) == 0) {
                 NULL
         } else {
-                cat(paste("Subject ID:", visit$subject_id))
+                # create subjectSummary object
+                summary_df <- subj$df %>% 
+                        group_by(visit, room) %>% 
+                        summarise(mean_value = mean(value, na.rm = TRUE), 
+                                  .groups = "drop") %>% 
+                        pivot_wider(names_from = room, 
+                                    values_from = mean_value)
+                object <- list(summary_df = summary_df, 
+                               id = subj$id)
+                class(object) <- "subjectSummary"
+                invisible(object)
+                
+        }        
+}
+
+## print method for subjectSummary objects
+## ss an object of class subjectSummary
+print.subjectSummary <- function(ss, ...) {
+        cat(paste("ID:", ss$id))
+        cat(paste(" ", " ",  sep = "\n"))
+        print(ss$summary_df)        
+}
+
+
+## generic method visit filters subject objects 
+## subj an object of class subject
+## visit_id a numeric id specifying the visit
+## to filter on
+## returns an object of class visit
+visit <- function(subj, visit_id) UseMethod("visit")
+visit.subject <- function(subj, visit_id) {
+        if(!is.numeric(visit_id)) {
+                stop("'visit_id' should be a numeric value")
+        }
+        
+        visit_df <- subj$df %>% filter(visit == visit_id)
+        object <- list(df = visit_df, id = subj$id, visit_id = visit_id)
+        class(object) <- "visit"
+        object
+}
+
+## print method for visit objects
+print.visit <- function(visit, ...) {
+        if(nrow(visit$df) == 0){
+                print(NULL)
+        } else {
+                cat(paste("Subject ID:", visit$id))
                 cat(paste("\nVisit:", visit$visit_id))
                 
         }
-        
-}
-## generic method for summarizing visit objects
-## returns a visitSummary object
-summary.visit <- function(visit) {
-        summary_df <- visit$df %>% 
-                select(room, value) %>% 
-                group_by(room) %>% 
-                summarise(mean_values = mean(value, na.rm = TRUE)) %>% 
-                pivot_wider(names_from = room, values_from = mean_values) 
-        structure(list(subject_id = visit$subject_id, 
-                       visit_id = visit$visit_id, 
-                       summary_df = summary_df),
-                  class = "visitSummary")
+        invisible(visit)
 }
 
-## generic method for printing visitSummary objects
-print.visitSummary <- function(visitSummary) {
-        cat(paste("ID:", visitSummary$subject_id))
-        cat(paste("\nVisit:", visitSummary$visit_id, "\n"))
-        print(visitSummary$summary_df)
-        
-}
-## room function takes a visit object and character string 
-## and returns a room object containing a dataframe 
-## filtered by room_name
-room <- function(visit, room_name) {
-        room_df <- visit$df %>% filter(room == room_name) 
-        structure(list(subject_id = visit$subject_id, 
-                       visit_id = visit$visit_id, 
-                       room_name = room_name,
-                       df = room_df),
-                  class = "room")
+## summary method for visit objects
+## creates a table of mean values for 
+## each room type
+## returns object of class visitSummary
+summary.visit <- function(visit, ...) {
+        if(nrow(visit$df) == 0) {
+                NULL
+        } else {
+                # create visitSummary object
+                summary_df <- visit$df %>% 
+                        group_by(room) %>% 
+                        summarise(mean_value = mean(value, na.rm = TRUE), 
+                                  .groups = "drop") %>% 
+                        pivot_wider(names_from = room, 
+                                    values_from = mean_value)
+                object <- list(summary_df = summary_df, 
+                               id = visit$id,
+                               visit_id = visit$visit_id)
+                class(object) <- "visitSummary"
+                invisible(object)
+                
+        }                
 }
 
-## generic method for printing room objects
-print.room <- function(room) {
+## print method for visitSummary objects
+## vs an object of class visitSummary
+print.visitSummary <- function(vs, ...) {
+        cat(paste("ID:", vs$id))
+        cat(paste("\nVisit:", vs$visit_id))
+        cat(paste(" ", " ",  sep = "\n"))
+        print(vs$summary_df)        
+}
+
+## generic method room filters visit objects 
+## visit an object of class visit
+## room_type a character string specifying
+## the room type to filter on
+## returns object of class room
+room <- function(visit, room_name) UseMethod("room")
+room.visit <- function(visit, room_name) {
+        if(!is.character(room_name)) {
+                stop("'room_name' should be a string")
+        }
+        
+        room_df <- visit$df %>% filter(room == room_name)
+        object <- list(df = room_df, id = visit$id, 
+                       visit_id = visit$visit_id,
+                       room_name = room_name)
+        class(object) <- "room"
+        object
+}
+
+## print method for room objects
+## room an object of class room
+print.room <- function(room, ...) {
         if(nrow(room$df) == 0){
                 NULL
         } else {
-                cat(paste("Subject ID:", room$subject_id))
+                cat(paste("Subject ID:", room$id))
                 cat(paste("\nVisit:", room$visit_id))
                 cat(paste("\nRoom:", room$room_name))
-                
-        }
-        
+        } 
+        invisible(room)
 }
-## generic method for summarizing room objects
-## returns a roomSummary object
+
+## summary method for room objects
+## room an object of class room
+## creates a table summarizing values
+## from the room object: 
+##      min, max, med, mean and 1st/3rd quantiles
+## returns object of class roomSummary
 summary.room <- function(room) {
         summary_df <- room$df %>% 
                 select(value) %>% 
@@ -160,19 +220,20 @@ summary.room <- function(room) {
                           Median = median(value), 
                           Mean = mean(value, na.rm = TRUE), 
                           `3rd Qu.` = quantile(value, 0.75), 
-                          `Max.` = max(value))
+                          `Max.` = max(value))   
         
-        structure(list(subject_id = room$subject_id, 
+        object <- list(id = room$id, 
                        visit_id = room$visit_id,
                        room_name = room$room_name,
-                       summary_df = summary_df),
-                  class = "roomSummary")        
+                       summary_df = summary_df)
+        class(object) <- "roomSummary" 
+        invisible(object)
 }
+
 ## generic method for printing roomSummary objects
-print.roomSummary <- function(roomSummary) {
-        cat(paste("ID:", roomSummary$subject_id, "\n"))
-        print(roomSummary$summary_df)
+## rs an object of class roomSummary
+print.roomSummary <- function(rs, ...) {
+        
+        cat(paste("ID:", rs$id, "\n"))
+        print(rs$summary_df)
 }
-
-
-
